@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fleet-database
+  namespace: platform--security
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fleet-database
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+      labels:
+        app: fleet-database
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node/type
+                operator: In
+                values:
+                - standard
+              - key: service/type
+                operator: In
+                values:
+                - general
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - fleet-database
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+        - image: mysql:8.3.0
+          name: mysql
+          env:
+          - name: MYSQL_USER
+            value: "fleet"
+          - name: MYSQL_PASSWORD
+            value: "Admin#1234"
+          - name: MYSQL_DATABASE
+            value: "fleet"
+          - name: MYSQL_RANDOM_ROOT_PASSWORD
+            value: "yes"
+          resources:
+            requests:
+              memory: "256Mi"
+            limits:
+              memory: "1024Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+        - image: redis:alpine
+          name: redis
+      restartPolicy: Always
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-database
+  namespace: platform--security
+spec:
+  ports:
+    - name: "mysql"
+      port: 3306
+      targetPort: 3306
+    - name: "redis"
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP
+  selector:
+    app: fleet-database
